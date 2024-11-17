@@ -14,11 +14,4 @@
 	<natures>
 		<nature>org.eclipse.jdt.core.javanature</nature>
 	</natures>
-	<linkedResources>
-		<link>
-			<name>SweetHome3D-7.5.jar</name>
-			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/Downloads/SweetHome3D-7.5.jar</locationURI>
-		</link>
-	</linkedResources>
 </projectDescription>
