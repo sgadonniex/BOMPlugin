@@ -41,7 +41,6 @@ public class BOMPlugin extends Plugin {
     float home_maxX = Float.MIN_VALUE;
     float home_maxY = Float.MIN_VALUE;
 	
-
     
     // Enum for wall types
 	
