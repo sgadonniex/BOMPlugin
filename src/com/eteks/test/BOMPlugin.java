@@ -8,9 +8,10 @@
 package com.eteks.test;
 
 import com.eteks.sweethome3d.plugin.Plugin;
+
 import com.eteks.sweethome3d.plugin.PluginAction;
 import javax.swing.JOptionPane;
-import com.eteks.sweethome3d.model.PieceOfFurniture;
+import com.eteks.sweethome3d.model.HomePieceOfFurniture;
 import com.eteks.sweethome3d.model.Wall;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,6 +25,7 @@ public class BOMPlugin extends Plugin {
 
 	// the following are a list of the material definitions that will be used in the
 	// project
+    private List<BrickWall> brickWallsList;
 	private Brick brick;
 	private Brick halfbrick;
 	private Brick channelbrick;
@@ -32,7 +34,29 @@ public class BOMPlugin extends Plugin {
 	private float subwallheight;
 	private float tolerance;
 	private String outputFileName = "billofmaterials.txt";
+	
+	// exterior bounds
+    float home_minX = Float.MAX_VALUE;
+    float home_minY = Float.MAX_VALUE;
+    float home_maxX = Float.MIN_VALUE;
+    float home_maxY = Float.MIN_VALUE;
+	
 
+    
+    // Enum for wall types
+	
+    public enum WallType {
+        exterior,
+        interior,
+        notSet
+    }
+
+    public enum WallOrientation {
+    	notSet,
+    	horizontal,
+    	vertical
+    }   
+        
 	// Constructor
 	public BOMPlugin() {
 		// the following variables set the dimensions of the building rules and
@@ -48,6 +72,7 @@ public class BOMPlugin extends Plugin {
 		this.subwallheight = (float) 100;
 		this.tolerance = 0.1f;
 		this.outputFileName = "./billofmaterials.txt";
+        this.brickWallsList = new ArrayList<>();
 
 	}
 
@@ -112,11 +137,6 @@ public class BOMPlugin extends Plugin {
 		@Override
 		public void execute() {
 	         // Array to hold BrickWall objects
-            List<BrickWall> brickWalls = new ArrayList<>();
-
-
-
-			
             // house level parameters
 			float numWalls = getHome().getWalls().size();
 			// Height related parameters
@@ -129,46 +149,45 @@ public class BOMPlugin extends Plugin {
 			float totalHalfBricks =0;
 			float totalHalfChannelBricks = 0;
 			float wallHeight = 0;
-			int wallIndex = 0;
 
 			StringBuilder summary = new StringBuilder();
 			StringBuilder walls = new StringBuilder();
 			
 			// Title
 			summary.append("Bill of Materials Summary:\n");
+			walls.append("Wall Description \n");
+			
+            // figure out exterior bounds
+			getExteriorBounds();
+
+			// Build list of walls and establish the exterior walls
+			for (Wall wall : getHome().getWalls()) {
+				// build the list of walls and establish the exterior vs interior
+				// plus, put in the windows and door
+                BrickWall brickWall = new BrickWall(wall.getXStart(), wall.getYStart(), wall.getXEnd(), wall.getYEnd() ,wall.getThickness(), wall.getHeight(), tolerance, subwallheight); 
+                BOMPlugin.this.brickWallsList.add(brickWall);
+                //is this an exterior wall?
+                setWallType(brickWall);
+                
+                // Add doors or windows intersecting with this wall
+				for (HomePieceOfFurniture piece : getHome().getFurniture()) {
+					if (piece.isDoorOrWindow()) {
+						// figure out if the door or window intersects with the wall and if so, add it to the wall
+						brickWall.addDoorOrWindow(piece);
+					}
+				}
+				
+				// now build the wall, which calculates the materials needed for the wall	
+				brickWall.buildWall(brick, halfbrick);
+				
+				// build the wall description
+				walls.append(brickWall.getWallDescription());
+			}
+			
+            
 			
 			// Compute the window and door area in bricks
-			float windowDoorAreaInBricks = getWindowDoorAreaInBricks();
-
-			// Compute the number of bricks and half bricks in the first layer of each wall.
-			// also get the height of the wall
-			for (Wall wall : getHome().getWalls()) {
-				// add a BrickWall object to the house
-				// build the wall and get the number of bricks needed
-                // Create a new BrickWall object and add it to the array
-                BrickWall brickWall = new BrickWall(wall.getLength(), wall.getHeight(), tolerance, subwallheight, rebarlength);
-                brickWalls.add(brickWall);	
-                brickWall.buildWall(brick,halfbrick); // build the wall
-                // accumulate the house level parameters
-                // brick counts
-                totalBricksInLayer += brickWall.getNumBricksInLayer();
-                totalBricks += brickWall.getNumBricks();
-                totalHalfBricks += brickWall.getNumHalfBricks();
-                totalChannelBricks += brickWall.getNumChannelBricks();
-                totalHalfChannelBricks += brickWall.getNumHalfChannelBricks();
-                // height related parameters
-                numLayers = brickWall.getTotalLayers();
-                numBrickLayers = brickWall.getNumBrickLayers();
-                subwallLayers = brickWall.getNumChannelLayers();
-                wallHeight = wall.getHeight();
-                wallIndex++;
-                
-                // build the output string for each wall
-                walls.append("Wall number ").append(wallIndex).append("\n");
-                walls.append( brickWall.getWallDescription()).append("\n");
-             
-                
-			}
+			float windowDoorAreaInBricks = getWindowDoorAreaInBricks();		
 
 			// subtract the windows and doors from the total bricks
 			totalBricks -= windowDoorAreaInBricks;
@@ -198,9 +217,6 @@ public class BOMPlugin extends Plugin {
 			summary.append("Half Brick Dimensions: ").append(halfbrick.getLength()).append("cm x ")
 					.append(halfbrick.getWidth()).append("cm x ").append(halfbrick.getHeight()).append("cm\n");
 
-			// Display the contents of sb on the screen
-	//		JOptionPane.showMessageDialog(null, summary.toString());
-	//		JOptionPane.showMessageDialog(null, walls.toString());
 
 			outputBillOfMaterials(summary.toString());
 			outputBillOfMaterials(walls.toString());
@@ -241,7 +257,7 @@ public class BOMPlugin extends Plugin {
 		float dowheightinbricks = 0;
 		float dowwidthinbricks = 0;
 
-		for (PieceOfFurniture piece : getHome().getFurniture()) {
+		for (HomePieceOfFurniture piece : getHome().getFurniture()) {
 			if (piece.isDoorOrWindow()) {
 				doororwindowheight = piece.getHeight();
 				dowheightinbricks = Math.round(doororwindowheight / brick.getHeight());
@@ -252,5 +268,36 @@ public class BOMPlugin extends Plugin {
 		}
 		return windowDoorAreaInBricks;
 	}
+	
+ 
+    public void getExteriorBounds() {
+
+        for (Wall wall : getHome().getWalls()) {
+            float xStart = wall.getXStart();
+            float yStart = wall.getYStart();
+            float xEnd = wall.getXEnd();
+            float yEnd = wall.getYEnd();
+
+            if (xStart < home_minX) home_minX = xStart;
+            if (yStart < home_minY) home_minY = yStart;
+            if (xEnd > home_maxX) home_maxX = xEnd;
+            if (yEnd > home_maxY) home_maxY = yEnd;
+        }
+
+    }   
+    
+    public void setWallType(BrickWall wall) {
+        float xStart = wall.getXStart();
+        float yStart = wall.getYStart();
+        float xEnd = wall.getXEnd();
+        float yEnd = wall.getYEnd();
+
+        if ((xStart == home_minX || xStart == home_maxX || xEnd == home_minX || xEnd == home_maxX) ||
+            (yStart == home_minY || yStart == home_maxY || yEnd == home_minY || yEnd == home_maxY)) {
+            wall.setWallType(BOMPlugin.WallType.exterior);
+        } else {
+            wall.setWallType(BOMPlugin.WallType.interior);
+        }
+    }
 
 } // end of BOMPlugin class
